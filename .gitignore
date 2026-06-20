@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+X_data.npy
+y_labels.npy
+y_impact.npy
