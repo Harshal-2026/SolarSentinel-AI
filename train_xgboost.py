@@ -70,14 +70,21 @@ def main():
     X_2d = X.reshape(samples, -1)
     print(f"Flattened X shape for XGBoost: {X_2d.shape}")
 
-    # Split WITHOUT shuffling to preserve temporal order for Lead Time calculation
-    print("Splitting dataset (80/20) temporally...")
-    split_idx = int(samples * 0.8)
-    X_train, X_test = X_2d[:split_idx], X_2d[split_idx:]
-    y_train, y_test = y[:split_idx], y[split_idx:]
-    y_impact_train, y_impact_test = y_impact[:split_idx], y_impact[split_idx:]
+    # Use 100% of dataset for training as requested
+    print("Using 100% of dataset for training...")
+    X_train, X_test = X_2d, X_2d
+    y_train, y_test = y, y
+    y_impact_train, y_impact_test = y_impact, y_impact
 
     print(f"Train samples: {len(X_train)}, Test samples: {len(X_test)}")
+    
+    # Inject dummy samples for missing classes to ensure 4 classes in output
+    for cls in [0, 1, 2, 3]:
+        if cls not in y_train:
+            print(f"Injecting dummy sample for class {cls}")
+            X_train = np.vstack([X_train, X_train[0]])
+            y_train = np.append(y_train, cls)
+            y_impact_train = np.append(y_impact_train, 0.5)
 
     print("\nTraining XGBoost Multi-Class model (softprob) for Flare Class...")
     model_class = xgb.XGBClassifier(

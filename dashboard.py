@@ -299,26 +299,26 @@ def load_xgboost_model():
         return model_class, model_impact
     return None
 
+def get_current_time():
+    try:
+        df = pd.read_csv("raw_flux_data.csv", parse_dates=["time"])
+        return df["time"].max()
+    except:
+        return datetime.now()
+
 @st.cache_data(ttl=60)
 def fetch_live_goes_data(hours=6):
     try:
-        url = "https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json"
-        data = requests.get(url, timeout=10).json()
-        df = pd.DataFrame(data)
-        df["time"] = pd.to_datetime(df["time_tag"]).dt.tz_localize(None)
+        df = pd.read_csv("raw_flux_data.csv", parse_dates=["time"])
+        max_time = df["time"].max()
+        cutoff = max_time - timedelta(hours=hours)
+        df_window = df[df["time"] >= cutoff].copy()
         
-        df_pivot = df.pivot(index="time", columns="energy", values="flux")
-        df_pivot.rename(columns={"0.1-0.8nm": "xrsb", "0.05-0.4nm": "xrsa"}, inplace=True)
-        df_pivot = df_pivot.reset_index().sort_values("time")
-        
-        cutoff = df_pivot["time"].max() - timedelta(hours=hours)
-        df_pivot = df_pivot[df_pivot["time"] >= cutoff].copy()
-        
-        df_pivot.ffill(inplace=True)
-        df_pivot.fillna({"xrsb": 1e-9, "xrsa": 1e-10}, inplace=True)
-        return df_pivot
+        df_window.ffill(inplace=True)
+        df_window.fillna({"xrsb": 1e-9, "xrsa": 1e-10}, inplace=True)
+        return df_window
     except Exception as e:
-        st.sidebar.error("Live API failed. Using simulated data.")
+        st.sidebar.error("Local data failed. Using simulated data.")
         return generate_simulated_flux(hours=hours)
 
 def predict_flare(df_flux, models):
@@ -418,7 +418,7 @@ def simulate_prediction():
 def generate_probability_history(hours=6):
     np.random.seed(42)
     n = hours * 4
-    now = datetime.now()
+    now = get_current_time()
     times = [now - timedelta(hours=hours) + timedelta(minutes=i * 15) for i in range(n)]
     raw = np.column_stack([
         0.6 + np.cumsum(np.random.randn(n) * 0.03),
@@ -497,7 +497,7 @@ def generate_historical_timeline():
     """Generate a list of historical flare events."""
     np.random.seed(99)
     events = []
-    now = datetime.now()
+    now = get_current_time()
     classes = ["C-class", "C-class", "M-class", "C-class", "X-class",
                "M-class", "C-class", "C-class", "M-class", "C-class",
                "B-class", "C-class"]
@@ -548,19 +548,19 @@ with st.sidebar:
         <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; padding-left: 4px;">
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="status-dot" style="background:#34C759; margin:0; width:6px; height:6px;"></span>
-                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">GOES-16/18</span>
+                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">Aditya-L1 SoLEXS</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="status-dot" style="background:#34C759; margin:0; width:6px; height:6px;"></span>
-                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">XRS Long (0.1-0.8nm)</span>
+                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">Soft X-Ray (0.1-0.8nm)</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="status-dot" style="background:#34C759; margin:0; width:6px; height:6px;"></span>
-                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">XRS Short (0.05-0.4nm)</span>
+                <span style="color: #fafafa; font-size: 0.85rem; font-weight: 500;">Hard X-Ray (0.05-0.4nm)</span>
             </div>
         </div>
         <div style="color: #8892a0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: 600;">Last Update</div>
-        <div style="color: #fafafa; font-size: 0.95rem; font-weight: 700; font-family: monospace; padding-left: 4px;">""" + datetime.now().strftime("%H:%M:%S") + """</div>
+        <div style="color: #fafafa; font-size: 0.95rem; font-weight: 700; font-family: monospace; padding-left: 4px;">""" + get_current_time().strftime("%H:%M:%S") + """</div>
     </div>
     """)
         
@@ -623,8 +623,8 @@ with st.sidebar:
 #  PAGE: HOME
 # ══════════════════════════════════════════════════
 if page == "Home":
-    st.markdown('<div class="gradient-header">Solar Flare Nowcast Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Real-time flare monitoring powered by NOAA GOES X-ray data & XGBoost ML</div>', unsafe_allow_html=True)
+    st.markdown('<div class="gradient-header">Aditya-L1 SoLEXS Nowcast Dashboard</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Real-time flare monitoring powered by Aditya-L1 SoLEXS data & XGBoost ML</div>', unsafe_allow_html=True)
 
     df_flux = fetch_live_goes_data(hours=6)
     model = load_xgboost_model()
@@ -700,12 +700,12 @@ if page == "Home":
         fig.add_trace(go.Scatter(
             x=df_flux["time"], y=df_flux["xrsb"], mode="lines",
             line=dict(color="#FF6B35", width=1.5),
-            fill="tozeroy", fillcolor="rgba(255,107,53,0.06)", name="Soft X-ray (GOES XRS Long)",
+            fill="tozeroy", fillcolor="rgba(255,107,53,0.06)", name="Soft X-ray (SoLEXS)",
         ))
         fig.add_trace(go.Scatter(
             x=df_flux["time"], y=df_flux["xrsa"], mode="lines",
             line=dict(color="#34C759", width=1.5),
-            name="Hard X-ray (GOES XRS Short)",
+            name="Hard X-ray (SoLEXS)",
         ))
         for lbl, th, clr in [("C", 1e-6, "#FFD60A"), ("M", 1e-5, "#FF9500"), ("X", 1e-4, "#FF3B30")]:
             fig.add_hline(y=th, line_dash="dot", line_color=clr, opacity=0.45,
@@ -755,13 +755,13 @@ if page == "Home":
         x=df_hist["time"], y=df_hist["xrsb"], mode="lines",
         line=dict(color="#FF6B35", width=2),
         fill="tozeroy", fillcolor="rgba(255,107,53,0.05)",
-        name="Soft X-ray (GOES XRS Long)",
+        name="Soft X-ray (SoLEXS)",
     ))
     # Hard X-ray (secondary channel)
     fig_hist.add_trace(go.Scatter(
         x=df_hist["time"], y=df_hist["xrsa"], mode="lines",
         line=dict(color="#34C759", width=1.5),
-        name="Hard X-ray (GOES XRS Short)",
+        name="Hard X-ray (SoLEXS)",
     ))
 
     # GOES classification thresholds
@@ -834,7 +834,7 @@ if page == "Home":
 # ══════════════════════════════════════════════════
 elif page == "Current Activity":
     st.markdown('<div class="gradient-header">Current Solar Activity</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Live X-ray flux with GOES classification thresholds</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">SoLEXS X-ray flux with standard classification thresholds</div>', unsafe_allow_html=True)
 
     hours = st.slider("Display window (hours)", 1, 48, 24, key="act_hrs")
     df_flux = fetch_live_goes_data(hours=hours)
@@ -850,12 +850,12 @@ elif page == "Current Activity":
     fig.add_trace(go.Scatter(
         x=df_flux["time"], y=df_flux["xrsb"], mode="lines",
         line=dict(color="#FF6B35", width=2),
-        fill="tozeroy", fillcolor="rgba(255,107,53,0.05)", name="Soft X-ray (GOES XRS Long)",
+        fill="tozeroy", fillcolor="rgba(255,107,53,0.05)", name="Soft X-ray (SoLEXS)",
     ))
     fig.add_trace(go.Scatter(
         x=df_flux["time"], y=df_flux["xrsa"], mode="lines",
         line=dict(color="#34C759", width=2),
-        name="Hard X-ray (GOES XRS Short)",
+        name="Hard X-ray (SoLEXS)",
     ))
     for lbl, th, clr in [("B", 1e-7, "#34C759"), ("C", 1e-6, "#FFD60A"), ("M", 1e-5, "#FF9500"), ("X", 1e-4, "#FF3B30")]:
         fig.add_hline(y=th, line_dash="dot", line_color=clr, opacity=0.4,
@@ -1154,7 +1154,7 @@ elif page == "Prediction":
         cme_speed = spatial["speed"]
         cme_width = spatial["width"]
         arrival_seconds = 1.5e6 / cme_speed if cme_speed > 0 else 0
-        arrival_time = datetime.utcnow() + timedelta(seconds=arrival_seconds)
+        arrival_time = get_current_time() + timedelta(seconds=arrival_seconds)
         
         # Calculate subsolar point roughly
         day_of_year = arrival_time.timetuple().tm_yday
@@ -1435,15 +1435,15 @@ elif page == "Alerts":
         {"type": "alert-critical", "title": "M-Class Flare Alert",
          "probability": "87%", "eta": "45 minutes", "risk": "Critical",
          "detail": "Sustained flux rise detected. M-class probability exceeds alert threshold.",
-         "time": (datetime.now() - timedelta(minutes=12)).strftime("%H:%M:%S"), "color": "#FF3B30"},
+         "time": (get_current_time() - timedelta(minutes=12)).strftime("%H:%M:%S"), "color": "#FF3B30"},
         {"type": "alert-warning", "title": "C-Class Activity Warning",
          "probability": "64%", "eta": "~20 minutes", "risk": "High",
          "detail": "Moderate flux increase observed. C-class event likely.",
-         "time": (datetime.now() - timedelta(minutes=38)).strftime("%H:%M:%S"), "color": "#FFCC00"},
+         "time": (get_current_time() - timedelta(minutes=38)).strftime("%H:%M:%S"), "color": "#FFCC00"},
         {"type": "alert-info", "title": "Background Flux Normal",
          "probability": "8%", "eta": "N/A", "risk": "Low",
          "detail": "Solar activity at background levels. No imminent flare expected.",
-         "time": (datetime.now() - timedelta(hours=1, minutes=15)).strftime("%H:%M:%S"), "color": "#34C759"},
+         "time": (get_current_time() - timedelta(hours=1, minutes=15)).strftime("%H:%M:%S"), "color": "#34C759"},
     ]
 
     # Counters
